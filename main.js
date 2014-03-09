@@ -104,11 +104,15 @@ Http2Response.prototype.isACK = function() {
     return (this.frameHeader.flag === 0x1);
 };
 Http2Response.prototype.HEADERS = function() {
+    var N = 0;
     console.log('HEADERS');
     console.log(this.headersFlag());
     if (this.isIndexed()) {
         console.log('[status] Indexed Header Field Representation');
         // parse payload using static-table
+        N = this.getValueLengthPrefix();
+        console.log('[status] Value Length Prefix: ', N);
+
     } else {
         console.log('[status] sorry, this header representation is not supported.');
     }
@@ -131,6 +135,9 @@ Http2Response.prototype.headersFlag = function() {
 };
 Http2Response.prototype.isIndexed = function() {
     return ((this.payloadBuff[0] & parseInt('1' + Array(7+1).join('0'), 2)) > 0);
+};
+Http2Response.prototype.getValueLengthPrefix = function() {
+    return (this.payloadBuff[0] & parseInt('0' + Array(7+1).join('1'), 2))
 };
 Http2Response.prototype.DATA = function() {
     console.log('DATA');
@@ -181,9 +188,11 @@ function StreamHandler(sock) {
                         console.log('[status] handling next data.');
                         self.handleFrontFrame();
                     } else if (StreamConf.ready) {
+                        // Todo: use sendBuff
                         console.log('[status] established http2 session!!');
                         self.socket.write(headersFrame);
                         console.log('[status] sent request');
+                        StreamConf.ready = false;
                     }
                 });
             }

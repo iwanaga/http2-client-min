@@ -9,7 +9,9 @@ var SettingReservedSize = 1;
 var SettingIdentifierSize = 3;
 var SettingValueSize = 4;
 var MagicOctet = new Buffer('PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n', 'ascii');
-var StreamConf = {};
+var StreamConf = {
+    ready: false
+};
 
 // R: 00 (2 bit)
 // Payload Length: 0 (14 bit)
@@ -41,7 +43,7 @@ var SettingIdentifier = {
 function Http2Response(data){
     this.frameHeader = null;
     this.payloadBuff = null;
-
+    this.responseSize = 0;
 }
 
 Http2Response.prototype.setFrameHeader = function(buffer) {
@@ -55,7 +57,10 @@ Http2Response.prototype.setFrameHeader = function(buffer) {
 
 Http2Response.prototype.setPayload = function(payload, callback) {
     this.payloadBuff = payload;
+    this.responseSize = FrameHeaderSize + this.frameHeader.size;
+    console.log(this);
     this[this.frameHeader.type]();
+
     callback && callback();
 };
 
@@ -81,13 +86,22 @@ Http2Response.prototype.getSetting = function(setting) {
  * Frame Handlers
  */
 Http2Response.prototype.SETTINGS = function() {
+    if ( this.isACK() ) {
+        StreamConf.ready = true;
+    }
     for (var i = 0, n = this.getNumberOfSettings(); i < n; i++) {
         this.setStreamConf(this.getSetting(this.payloadBuff.slice(i * SettingSize, (i + 1) * SettingSize)));
     }
+    console.log(StreamConf);
+};
+Http2Response.prototype.isACK = function() {
+    return (this.frameHeader.flag === 0x1);
+};
+Http2Response.prototype.DATA = function() {
+    console.log(this.payloadBuff);
 };
 
 Http2Response.prototype.frameHander = {
-    DATA: function(){},
     HEADERS: function(){},
     PRIORITY: function(){},
     RST_STREAM: function(){},
@@ -101,26 +115,36 @@ Http2Response.prototype.frameHander = {
 function StreamHandler() {
     var self = this;
     this.dataBuff = new Buffer(0);
-    this.ready = false;
 
     this.handleData = function(data){
+        console.log('data.length: ', data.length);
         self.appendData(data);
+        self.handleFrontFrame();
+    };
+
+    this.handleFrontFrame = function() {
         if ( self.hasFrameHeader() ) {
-            var response = new Http2Response(data);
-            response.setFrameHeader(data.slice(0, FrameHeaderSize));
-            if ( self.hasPayload(data) ) {
-                response.setPayload(self.getPayload(data), function(){
-                    console.log(response);
-                    console.log(StreamConf);
-                    //shiftBuffer(data);
+            var response = new Http2Response(self.dataBuff);
+            response.setFrameHeader(self.dataBuff.slice(0, FrameHeaderSize));
+            if ( self.hasPayload(self.dataBuff) ) {
+                response.setPayload(self.getPayload(self.dataBuff), function(){
+                    self.shiftBuffer(response.responseSize);
+                    if (self.dataBuff.length > 0) {
+                        console.log('after shift: ', self.dataBuff);
+                        console.log('handling next data.');
+                        self.handleFrontFrame();
+                    } else if (StreamConf.ready) {
+                        console.log('established http2 session!!');
+                        //sock.write(Buffer.concat([]));
+                    }
                 });
-                if (self.ready) {
-                    sock.write(Buffer.concat([]));
-                }
             }
         }
     };
 }
+StreamHandler.prototype.setData = function(data) {
+    this.dataBuff = data;
+};
 StreamHandler.prototype.appendData = function(data) {
     this.dataBuff = Buffer.concat([this.dataBuff, data]);
 };
@@ -136,14 +160,15 @@ StreamHandler.prototype.getPayloadSize = function() {
 StreamHandler.prototype.getPayload = function() {
     return this.dataBuff.slice(FrameHeaderSize, FrameHeaderSize + this.getPayloadSize());
 };
-//StreamHandler.prototype.shiftBuffer = function(buffer) {
-//    var shiftSize = SIZE_JMAHEAD + getMessageSize(this.buff);
-//    var tmpBuff = new Buffer(this.buff.slice(SIZE_JMAHEAD + getMessageSize(this.buff)));
-//    this.buff.fill(0);
-//    tmpBuff.copy(this.buff);
-//    this.size = this.size - shiftSize;
-//    tmpBuff = null;
-//};
+StreamHandler.prototype.hasNextData = function(responseSize) {
+    console.log(this.dataBuff.length, responseSize);
+    return (this.dataBuff.length > responseSize);
+}
+StreamHandler.prototype.shiftBuffer = function(size) {
+    var newBuff = new Buffer(this.dataBuff.length - size);
+    this.dataBuff.copy(newBuff, 0, size, this.dataBuff.length);
+    this.dataBuff = newBuff;
+};
 
 
 /* utility functions */

@@ -10,7 +10,8 @@ var SettingIdentifierSize = 3;
 var SettingValueSize = 4;
 var MagicOctet = new Buffer('PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n', 'ascii');
 var StreamConf = {
-    ready: false
+    ready: false,
+    nextStreamId: 0x1
 };
 
 // R: 00 (2 bit)
@@ -44,6 +45,7 @@ function Http2Response(data){
     this.frameHeader = null;
     this.payloadBuff = null;
     this.responseSize = 0;
+    this.sendBuff = new Buffer(0);
 }
 
 Http2Response.prototype.setFrameHeader = function(buffer) {
@@ -85,8 +87,11 @@ Http2Response.prototype.getSetting = function(setting) {
 /**
  * Frame Handlers
  */
+var ACK = new Buffer([0, 0, FrameType.SETTINGS, 1,
+                      0, 0, 0, 0]);
 Http2Response.prototype.SETTINGS = function() {
     if ( this.isACK() ) {
+        this.sendBuff = ACK;
         StreamConf.ready = true;
     }
     for (var i = 0, n = this.getNumberOfSettings(); i < n; i++) {
@@ -100,20 +105,25 @@ Http2Response.prototype.isACK = function() {
 Http2Response.prototype.DATA = function() {
     console.log(this.payloadBuff);
 };
+Http2Response.prototype.RST_STREAM = function() {
+    console.log('RST_STREAM');
+};
+Http2Response.prototype.GOAWAY = function() {
+    console.log('GOAWAY');
+};
 
 Http2Response.prototype.frameHander = {
     HEADERS: function(){},
     PRIORITY: function(){},
-    RST_STREAM: function(){},
     PUSH_PROMISE: function(){},
     PING: function(){},
-    GOAWAY: function(){},
     WINDOW_UPDATE: function(){},
     CONTINUATION: function(){}
 };
 
-function StreamHandler() {
+function StreamHandler(sock) {
     var self = this;
+    this.socket = sock;
     this.dataBuff = new Buffer(0);
 
     this.handleData = function(data){
@@ -128,6 +138,11 @@ function StreamHandler() {
             response.setFrameHeader(self.dataBuff.slice(0, FrameHeaderSize));
             if ( self.hasPayload(self.dataBuff) ) {
                 response.setPayload(self.getPayload(self.dataBuff), function(){
+                    if (response.sendBuff.length > 0) {
+                        console.log('sending SETTING ACK');
+                        self.socket.write(response.sendBuff);
+                        response.sendBuff = new Buffer(0);
+                    }
                     self.shiftBuffer(response.responseSize);
                     if (self.dataBuff.length > 0) {
                         console.log('after shift: ', self.dataBuff);
@@ -135,7 +150,7 @@ function StreamHandler() {
                         self.handleFrontFrame();
                     } else if (StreamConf.ready) {
                         console.log('established http2 session!!');
-                        //sock.write(Buffer.concat([]));
+                        self.socket.write(headersFrame);
                     }
                 });
             }
@@ -181,10 +196,46 @@ var initialSettingFrame = Buffer([0x0, 0x0, FrameType.SETTINGS, 0x0,
 
 var headersPayload = new Buffer([0x0, 0x0, 0x0, 0x0]);
 
-//var headers = new Buffer([0x0, 0x?, FrameType.HEADERS, 0x0,
-//			  0x0, 0x0, 0x0, 0x1
-//]);
+// request header
+var requestHeaders = [
+    { key: ':method',    val: 'GET' },
+    { key: ':scheme',    val: CONF.schema },
+    { key: ':path',      val: '/' },
+    { key: ':authority', val: CONF.host + ':' + CONF.port.toString() }
+];
 
+// HEADERS Frame
+var headerFrameLen = 0;
+var streamId = 0x1;
+var HeaderFlag = {
+    END_STREAM : 0x1,
+    RESERVED   : 0x2,
+    END_HEADERS: 0x4,
+    PRIORITY   : 0x8
+}
+
+var frameHeader = [0x0, headerFrameLen, FrameType.HEADERS, HeaderFlag.END_HEADERS | HeaderFlag.END_STREAM,
+		   0x0, 0x0, 0x0, streamId];
+var priority = [0x0, 0x0, 0x0, 0x0];
+var literalWithoutIndex = parseInt('01000000',2);
+var headerBlock = [];
+for (var i = 0; i < requestHeaders.length; i++) {
+    headerBlock.push(literalWithoutIndex);
+    headerBlock.push(requestHeaders[i].key.length);
+    for (var j = 0; j < requestHeaders[i].key.length; j++) {
+        headerBlock.push(requestHeaders[i].key.charCodeAt(j));
+    }
+    headerBlock.push(requestHeaders[i].val.length);
+    for (var j = 0; j < requestHeaders[i].val.length; j++) {
+        headerBlock.push(requestHeaders[i].val.charCodeAt(j));
+    }
+}
+var headersFrame = new Buffer([]
+			      .concat(frameHeader)
+			      .concat(priority)
+			      .concat(headerBlock));
+
+// main
 var sock = net.Socket({
     allwoHalfOepn: true,
     readable: true,
@@ -192,7 +243,7 @@ var sock = net.Socket({
 });
 
 sock.connect(CONF.port, CONF.host, function(){
-    var stream = new StreamHandler();
+    var stream = new StreamHandler(sock);
     sock.on('error', function(err){
         console.log(err);
     });

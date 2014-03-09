@@ -1,5 +1,6 @@
 {
   "schema": "http",
   "host": "106.186.112.116",
-  "port": 80
+  "port": 80,
+  "agent": "http2 test client"
 }

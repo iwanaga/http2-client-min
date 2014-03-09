@@ -91,6 +91,7 @@ var ACK = new Buffer([0, 0, FrameType.SETTINGS, 1,
                       0, 0, 0, 0]);
 Http2Response.prototype.SETTINGS = function() {
     if ( this.isACK() ) {
+        console.log('[status] receipt SETTING ACK');
         this.sendBuff = ACK;
         StreamConf.ready = true;
     }
@@ -102,8 +103,39 @@ Http2Response.prototype.SETTINGS = function() {
 Http2Response.prototype.isACK = function() {
     return (this.frameHeader.flag === 0x1);
 };
+Http2Response.prototype.HEADERS = function() {
+    console.log('HEADERS');
+    console.log(this.headersFlag());
+    if (this.isIndexed()) {
+        console.log('[status] Indexed Header Field Representation');
+        // parse payload using static-table
+    } else {
+        console.log('[status] sorry, this header representation is not supported.');
+    }
+};
+Http2Response.prototype.headersFlag = function() {
+    var flags = [];
+    if (this.frameHeader.flag & 0x1) {
+        flags.push('END_STREAM');
+    }
+    if (this.frameHeader.flag & 0x2) {
+        flags.push('RESERVED');
+    }
+    if (this.frameHeader.flag & 0x4) {
+        flags.push('END_HEADERS');
+    }
+    if (this.frameHeader.flag & 0x8) {
+        flags.push('PRIORITY');
+    }
+    return flags;
+};
+Http2Response.prototype.isIndexed = function() {
+    return ((this.payloadBuff[0] & parseInt('1' + Array(7+1).join('0'), 2)) > 0);
+};
 Http2Response.prototype.DATA = function() {
-    console.log(this.payloadBuff);
+    console.log('DATA');
+    console.log(this.headersFlag());
+    console.log(this.payloadBuff.toString('ascii'));
 };
 Http2Response.prototype.RST_STREAM = function() {
     console.log('RST_STREAM');
@@ -112,8 +144,8 @@ Http2Response.prototype.GOAWAY = function() {
     console.log('GOAWAY');
 };
 
+
 Http2Response.prototype.frameHander = {
-    HEADERS: function(){},
     PRIORITY: function(){},
     PUSH_PROMISE: function(){},
     PING: function(){},
@@ -139,18 +171,19 @@ function StreamHandler(sock) {
             if ( self.hasPayload(self.dataBuff) ) {
                 response.setPayload(self.getPayload(self.dataBuff), function(){
                     if (response.sendBuff.length > 0) {
-                        console.log('sending SETTING ACK');
                         self.socket.write(response.sendBuff);
+                        console.log('[status] sent SETTING ACK');
                         response.sendBuff = new Buffer(0);
                     }
                     self.shiftBuffer(response.responseSize);
                     if (self.dataBuff.length > 0) {
-                        console.log('after shift: ', self.dataBuff);
-                        console.log('handling next data.');
+                        console.log('[status] after shift: ', self.dataBuff);
+                        console.log('[status] handling next data.');
                         self.handleFrontFrame();
                     } else if (StreamConf.ready) {
-                        console.log('established http2 session!!');
+                        console.log('[status] established http2 session!!');
                         self.socket.write(headersFrame);
+                        console.log('[status] sent request');
                     }
                 });
             }
@@ -194,9 +227,7 @@ function readUInt24BE(buffer) {
 var initialSettingFrame = Buffer([0x0, 0x0, FrameType.SETTINGS, 0x0,
 				  0x0, 0x0, 0x0, 0x0]);
 
-var headersPayload = new Buffer([0x0, 0x0, 0x0, 0x0]);
-
-// request header
+// HEADERS Frame
 var requestHeaders = [
     { key: ':method',    val: 'GET' },
     { key: ':scheme',    val: CONF.schema },
@@ -204,7 +235,6 @@ var requestHeaders = [
     { key: ':authority', val: CONF.host + ':' + CONF.port.toString() }
 ];
 
-// HEADERS Frame
 var headerFrameLen = 0;
 var streamId = 0x1;
 var HeaderFlag = {
@@ -212,12 +242,12 @@ var HeaderFlag = {
     RESERVED   : 0x2,
     END_HEADERS: 0x4,
     PRIORITY   : 0x8
-}
+};
 
 var frameHeader = [0x0, headerFrameLen, FrameType.HEADERS, HeaderFlag.END_HEADERS | HeaderFlag.END_STREAM,
 		   0x0, 0x0, 0x0, streamId];
 var priority = [0x0, 0x0, 0x0, 0x0];
-var literalWithoutIndex = parseInt('01000000',2);
+var literalWithoutIndex = parseInt('01000000', 2);
 var headerBlock = [];
 for (var i = 0; i < requestHeaders.length; i++) {
     headerBlock.push(literalWithoutIndex);
@@ -230,10 +260,18 @@ for (var i = 0; i < requestHeaders.length; i++) {
         headerBlock.push(requestHeaders[i].val.charCodeAt(j));
     }
 }
+var hasPriorityFlag = false;
+var framePayload = [];
+if (hasPriorityFlag) {
+    framePayload = priority;
+}
+framePayload = framePayload.concat(headerBlock);
+
+headerFrameLen = framePayload.length;
+frameHeader[1] = headerFrameLen;
 var headersFrame = new Buffer([]
 			      .concat(frameHeader)
-			      .concat(priority)
-			      .concat(headerBlock));
+			      .concat(framePayload));
 
 // main
 var sock = net.Socket({

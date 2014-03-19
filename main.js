@@ -1,7 +1,7 @@
 "use strict";
 
 var net = require('net');
-
+var staticTable = require('./lib/staticTable');
 var CONF = require('./conf/conf.json');
 var FrameHeaderSize = 8;
 var SettingSize = 8;
@@ -46,6 +46,7 @@ function Http2Response(data){
     this.payloadBuff = null;
     this.responseSize = 0;
     this.sendBuff = new Buffer(0);
+    this.payloadIndex = 0;
 }
 
 Http2Response.prototype.setFrameHeader = function(buffer) {
@@ -107,14 +108,33 @@ Http2Response.prototype.HEADERS = function() {
     var N = 0;
     console.log('HEADERS');
     console.log(this.headersFlag());
-    if (this.isIndexed()) {
-        console.log('[status] Indexed Header Field Representation');
-        // parse payload using static-table
-        N = this.getValueLengthPrefix();
-        console.log('[status] Value Length Prefix: ', N);
+    for (var i = 0, len = this.payloadBuff.length; i < len; i++) {
+        if (this.bothIndexed()) {
+            console.log('[status] Header name, value: indexed');
+            console.log(this.indexToLiteral());
+            this.payloadIndex++;
+	    break;
+        } else if (this.bothLiteral()) {
+            console.log('[status] Header name, value: literal.');
+            this.decodeLiteral();
+        } else {
+            console.log('[status] Header name: indexed, value: literal');
+            console.log(this.getIndexedName());
+            this.payloadIndex++;
 
-    } else {
-        console.log('[status] sorry, this header representation is not supported.');
+            console.log('next octet: ', this.payloadBuff[this.payloadIndex].toString(2));
+            if (this.isHuffmanEncoding()) {
+                console.log('value encoding: Huffman');
+                var prefix = this.getHuffmanPrefix();
+                console.log('prefix: ', prefix);
+                this.payloadIndex++;
+                console.log('next octet: ', this.payloadBuff[this.payloadIndex].toString(2));
+                //console.log('value length: ', this.payloadBuff[this.payloadIndex]);
+            } else {
+                console.log('value encoding: ascii');
+                console.log('value length: ', this.payloadBuff[this.payloadIndex]);
+            }
+        }
     }
 };
 Http2Response.prototype.headersFlag = function() {
@@ -133,11 +153,33 @@ Http2Response.prototype.headersFlag = function() {
     }
     return flags;
 };
-Http2Response.prototype.isIndexed = function() {
-    return ((this.payloadBuff[0] & parseInt('1' + Array(7+1).join('0'), 2)) > 0);
+//Http2Response.prototype.isIndexed = function(i) {
+//    return ((this.payloadBuff[this.payloadIndex] & parseInt('1' + Array(7+1).join('0'), 2)) > 0);
+//};
+Http2Response.prototype.bothIndexed = function() {
+    return ((this.payloadBuff[this.payloadIndex] & parseInt('1' + Array(7+1).join('0'), 2)) > 0);
 };
-Http2Response.prototype.getValueLengthPrefix = function() {
-    return (this.payloadBuff[0] & parseInt('0' + Array(7+1).join('1'), 2))
+Http2Response.prototype.bothLiteral = function() {
+    return ((this.payloadBuff[this.payloadIndex] & parseInt('10' + Array(6+1).join('1'), 2)) === 0);
+};
+Http2Response.prototype.getIndexedName = function() {
+    console.log('index: ', this.payloadBuff[this.payloadIndex]);
+    return (staticTable[this.payloadBuff[this.payloadIndex] & parseInt(Array(6+1).join('1'),2)].key);
+};
+Http2Response.prototype.isHuffmanEncoding = Http2Response.prototype.bothIndexed;
+Http2Response.prototype.getHuffmanPrefix = function() {
+    return (this.payloadBuff[this.payloadIndex] & parseInt(Array(7+1).join('1'), 2) + 1);
+};
+Http2Response.prototype.indexToLiteral = function(i) {
+    return (staticTable[this.payloadBuff[this.payloadIndex] & parseInt(Array(7+1).join('1'),2)]);
+};
+Http2Response.prototype.decodeLiteral = function(i) {
+    var size = this.payloadBuff[this.payloadIndex];
+    console.log(size);
+    for (var i = 0; i < size; i++) {
+        staticTable[this.payloadBuff[this.payloadIndex] & parseInt(Array(7+1).join('1'),2)];
+    }
+    return;
 };
 Http2Response.prototype.DATA = function() {
     console.log('DATA');

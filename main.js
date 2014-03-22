@@ -1,6 +1,7 @@
 "use strict";
 
 var net = require('net');
+var HuffmanDecoder = require('./lib/huffman');
 var staticTable = require('./lib/staticTable');
 var CONF = require('./conf/conf.json');
 var FrameHeaderSize = 8;
@@ -113,20 +114,21 @@ Http2Response.prototype.HEADERS = function() {
             console.log('[status] Header name, value: indexed');
             console.log(this.indexToLiteral());
             this.payloadIndex++;
-	    break;
         } else if (this.bothLiteral()) {
             console.log('[status] Header name, value: literal.');
             this.decodeLiteral();
+            this.payloadIndex++;
         } else {
             console.log('[status] Header name: indexed, value: literal');
-            console.log(this.getIndexedName());
+            //console.log(this.getIndexedName());
             this.payloadIndex++;
 
             console.log('next octet: ', this.payloadBuff[this.payloadIndex].toString(2));
             if (this.isHuffmanEncoding()) {
                 console.log('value encoding: Huffman');
-                var prefix = this.getHuffmanPrefix();
-                console.log('prefix: ', prefix);
+		var decoder = new HuffmanDecoder(this.payloadBuff[this.payloadIndex]);
+                //var prefix = this.getHuffmanPrefix();
+                //console.log('prefix: ', prefix);
                 this.payloadIndex++;
                 console.log('next octet: ', this.payloadBuff[this.payloadIndex].toString(2));
                 //console.log('value length: ', this.payloadBuff[this.payloadIndex]);
@@ -184,7 +186,7 @@ Http2Response.prototype.decodeLiteral = function(i) {
 Http2Response.prototype.DATA = function() {
     console.log('DATA');
     console.log(this.headersFlag());
-    console.log(this.payloadBuff.toString('ascii'));
+    //console.log(this.payloadBuff.toString('ascii'));
 };
 Http2Response.prototype.RST_STREAM = function() {
     console.log('RST_STREAM');
@@ -192,8 +194,6 @@ Http2Response.prototype.RST_STREAM = function() {
 Http2Response.prototype.GOAWAY = function() {
     console.log('GOAWAY');
 };
-
-
 Http2Response.prototype.frameHander = {
     PRIORITY: function(){},
     PUSH_PROMISE: function(){},
@@ -283,7 +283,8 @@ var requestHeaders = [
     { key: ':method',    val: 'GET' },
     { key: ':scheme',    val: CONF.schema },
     { key: ':path',      val: '/' },
-    { key: ':authority', val: CONF.host + ':' + CONF.port.toString() }
+    { key: ':authority', val: CONF.host + ':' + CONF.port.toString() },
+    { key: 'user-agent', val: '@y_iwanaga_' }
 ];
 
 var headerFrameLen = 0;

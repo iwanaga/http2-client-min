@@ -137,7 +137,11 @@ Http2Response.prototype.HEADERS = function() {
                 //console.log('value length: ', this.payloadBuff[this.payloadIndex]);
             } else {
                 console.log('[debug] value encoding: ascii');
-                console.log('[debug] value length: ', this.payloadBuff[this.payloadIndex]);
+                var asciiLen = this.payloadBuff[this.payloadIndex];
+                //console.log('[debug] value length: ', asciiLen);
+                this.payloadIndex++;
+                console.log(name, this.payloadBuff.slice(this.payloadIndex, this.payloadIndex + asciiLen).toString('ascii'));
+		this.payloadIndex += asciiLen;
             }
         }
     }
@@ -169,6 +173,7 @@ Http2Response.prototype.bothLiteral = function() {
     return ((this.payloadBuff[this.payloadIndex] & parseInt('10' + Array(6+1).join('1'), 2)) === 0);
 };
 Http2Response.prototype.getIndexedName = function() {
+    console.log('[debug] name index', this.payloadBuff[this.payloadIndex] & parseInt(Array(6+1).join('1'),2));
     return (staticTable[this.payloadBuff[this.payloadIndex] & parseInt(Array(6+1).join('1'),2)].key);
 };
 Http2Response.prototype.isHuffmanEncoding = Http2Response.prototype.bothIndexed;

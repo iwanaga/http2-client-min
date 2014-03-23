@@ -93,7 +93,7 @@ var ACK = new Buffer([0, 0, FrameType.SETTINGS, 1,
                       0, 0, 0, 0]);
 Http2Response.prototype.SETTINGS = function() {
     if ( this.isACK() ) {
-        console.log('[status] receipt SETTING ACK');
+        console.log('[debug] receipt SETTING ACK');
         this.sendBuff = ACK;
         StreamConf.ready = true;
     }
@@ -111,30 +111,33 @@ Http2Response.prototype.HEADERS = function() {
     console.log(this.headersFlag());
     for (var i = 0, len = this.payloadBuff.length; i < len; i++) {
         if (this.bothIndexed()) {
-            console.log('[status] Header name, value: indexed');
+            console.log('[debug] Header name, value: indexed');
             console.log(this.indexToLiteral());
             this.payloadIndex++;
         } else if (this.bothLiteral()) {
-            console.log('[status] Header name, value: literal.');
+            console.log('[debug] === Header name, value: literal ===');
             this.decodeLiteral();
             this.payloadIndex++;
         } else {
-            console.log('[status] Header name: indexed, value: literal');
-            //console.log(this.getIndexedName());
+            console.log('[debug] Header name: indexed, value: literal');
+            var name = this.getIndexedName();
             this.payloadIndex++;
 
-            console.log('next octet: ', this.payloadBuff[this.payloadIndex].toString(2));
+            //console.log('next octet: ', this.payloadBuff[this.payloadIndex].toString(2));
             if (this.isHuffmanEncoding()) {
-                console.log('value encoding: Huffman');
-		var decoder = new HuffmanDecoder(this.payloadBuff[this.payloadIndex]);
-                //var prefix = this.getHuffmanPrefix();
-                //console.log('prefix: ', prefix);
-                this.payloadIndex++;
-                console.log('next octet: ', this.payloadBuff[this.payloadIndex].toString(2));
+                console.log('[debug] value encoding: Huffman');
+                var prefix = this.getHuffmanPrefix();
+		this.payloadIndex++;
+		var decoder = new HuffmanDecoder(this.payloadBuff, this.payloadIndex);
+                decoder.valueSize = prefix;
+		decoder.traverse(decoder.getNextBit());
+                console.log(name, decoder.decoded.join(''));
+                this.payloadIndex += prefix;
+                //console.log('next octet: ', this.payloadBuff[this.payloadIndex].toString(2));
                 //console.log('value length: ', this.payloadBuff[this.payloadIndex]);
             } else {
-                console.log('value encoding: ascii');
-                console.log('value length: ', this.payloadBuff[this.payloadIndex]);
+                console.log('[debug] value encoding: ascii');
+                console.log('[debug] value length: ', this.payloadBuff[this.payloadIndex]);
             }
         }
     }
@@ -162,25 +165,30 @@ Http2Response.prototype.bothIndexed = function() {
     return ((this.payloadBuff[this.payloadIndex] & parseInt('1' + Array(7+1).join('0'), 2)) > 0);
 };
 Http2Response.prototype.bothLiteral = function() {
+    // ignore second bit, the flag to remeber in header table
     return ((this.payloadBuff[this.payloadIndex] & parseInt('10' + Array(6+1).join('1'), 2)) === 0);
 };
 Http2Response.prototype.getIndexedName = function() {
-    console.log('index: ', this.payloadBuff[this.payloadIndex]);
     return (staticTable[this.payloadBuff[this.payloadIndex] & parseInt(Array(6+1).join('1'),2)].key);
 };
 Http2Response.prototype.isHuffmanEncoding = Http2Response.prototype.bothIndexed;
 Http2Response.prototype.getHuffmanPrefix = function() {
-    return (this.payloadBuff[this.payloadIndex] & parseInt(Array(7+1).join('1'), 2) + 1);
+    return (this.payloadBuff[this.payloadIndex] & parseInt(Array(7+1).join('1'), 2));
 };
 Http2Response.prototype.indexToLiteral = function(i) {
     return (staticTable[this.payloadBuff[this.payloadIndex] & parseInt(Array(7+1).join('1'),2)]);
 };
 Http2Response.prototype.decodeLiteral = function(i) {
-    var size = this.payloadBuff[this.payloadIndex];
-    console.log(size);
-    for (var i = 0; i < size; i++) {
-        staticTable[this.payloadBuff[this.payloadIndex] & parseInt(Array(7+1).join('1'),2)];
-    }
+    // get name size
+    // get name in ascii
+    // get value size
+    // get value in ascii
+
+    //var size = this.payloadBuff[this.payloadIndex];
+    //console.log(size);
+    //for (var i = 0; i < size; i++) {
+    //    staticTable[this.payloadBuff[this.payloadIndex] & parseInt(Array(7+1).join('1'),2)];
+    //}
     return;
 };
 Http2Response.prototype.DATA = function() {
@@ -221,19 +229,19 @@ function StreamHandler(sock) {
                 response.setPayload(self.getPayload(self.dataBuff), function(){
                     if (response.sendBuff.length > 0) {
                         self.socket.write(response.sendBuff);
-                        console.log('[status] sent SETTING ACK');
+                        console.log('[debug] sent SETTING ACK');
                         response.sendBuff = new Buffer(0);
                     }
                     self.shiftBuffer(response.responseSize);
                     if (self.dataBuff.length > 0) {
-                        console.log('[status] after shift: ', self.dataBuff);
-                        console.log('[status] handling next data.');
+                        console.log('[debug] after shift: ', self.dataBuff);
+                        console.log('[debug] handling next data.');
                         self.handleFrontFrame();
                     } else if (StreamConf.ready) {
                         // Todo: use sendBuff
-                        console.log('[status] established http2 session!!');
+                        console.log('[debug] established http2 session!!');
                         self.socket.write(headersFrame);
-                        console.log('[status] sent request');
+                        console.log('[debug] sent request');
                         StreamConf.ready = false;
                     }
                 });

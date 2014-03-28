@@ -109,7 +109,7 @@ Http2Response.prototype.HEADERS = function() {
     var N = 0;
     console.log('HEADERS');
     console.log(this.headersFlag());
-    for (var i = 0, len = this.payloadBuff.length; i < len; i++) {
+    while (this.payloadIndex < this.payloadBuff.length) {
         if (this.bothIndexed()) {
             console.log('[debug] Header name, value: indexed');
             console.log(this.indexToLiteral());

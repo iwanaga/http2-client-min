@@ -1,9 +1,8 @@
 "use strict";
 
 var net            = require('net');
-var Http2          = require('./lib/http2');
+var Http2          = require('./lib/http2constant');
 var StreamHandler  = require('./lib/http2stream');
-var Http2Response  = require('./lib/http2response');
 var CONF           = require('./conf/conf.json');
 
 // HEADERS Frame

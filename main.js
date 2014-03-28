@@ -35,11 +35,11 @@ sock.connect(CONF.port, CONF.host, function(){
         console.log(err);
     });
     sock.on('close', function(){
-        console.log('closed');
+        console.log('[debug] closed');
         sock.destroy();
     });
     sock.on('data', stream.handleData);
 
-    console.log('sending: Magic Octet + SETTINGS Frame');
+    console.log('[debug] sending: Magic Octet + SETTINGS Frame');
     sock.write(Buffer.concat([Http2.MagicOctet, initialSettingFrame]));
 });

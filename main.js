@@ -5,7 +5,9 @@ var Http2          = require('./lib/http2constant');
 var StreamHandler  = require('./lib/http2stream');
 var CONF           = require('./conf/conf.json');
 
-// HEADERS Frame
+/**
+ *  main
+ */
 var requestHeaders = [
     { key: ':method',    val: 'GET' },
     { key: ':scheme',    val: CONF.schema },
@@ -14,9 +16,7 @@ var requestHeaders = [
     { key: 'user-agent', val: '@y_iwanaga_' }
 ];
 
-/**
- *  main
- */
+// Todo: refactor...
 var initialSettingFrame = Buffer([0x0, 0x0, Http2.FrameType.SETTINGS, 0x0,
 				  0x0, 0x0, 0x0, 0x0]);
 

@@ -1,4 +1,4 @@
-var HuffmanDecoder = require('./huffman');
+var HuffmanDecoder = require('../lib/huffman');
 
 function testTree() {
     var tree = (new HuffmanDecoder()).currentNode;

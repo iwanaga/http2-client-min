@@ -17,8 +17,10 @@ var requestHeaders = [
 ];
 
 // Todo: refactor...
-var initialSettingFrame = Buffer([0x0, 0x0, Http2.FrameType.SETTINGS, 0x0,
-				  0x0, 0x0, 0x0, 0x0]);
+var initialSettingFrame = Buffer([
+    0x0, 0x0, Http2.FrameType.SETTINGS, 0x0,
+    0x0, 0x0, 0x0, 0x0
+]);
 
 var sock = net.Socket({
     allwoHalfOepn: true,

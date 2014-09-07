@@ -1,59 +1,70 @@
+var assert = require('assert');
 var HuffmanDecoder = require('../lib/huffman');
 
 function testTree() {
     var tree = (new HuffmanDecoder()).currentNode;
-    console.log(tree[0][0][0][1]);
-    console.log(tree[0][1][0][1][0]);
-    console.log(tree[1][0][0][0][0]);
-    console.log(tree[1][0][1][0][0][0]);
-    console.log(tree[1][1][0][1][1][0][0]);
-    console.log(tree[1][1][1][0][0][1][1]);
-    console.log(tree[1][1][1][0][1][1][1][0]);
-    console.log(tree[1][1][1][1][0][1][1][1][1]);
-    console.log(tree[1][1][1][1][1][0][0][1][0]);
+    console.log(tree[0][0][0][0][0]);
+    console.log(tree[1][0][0][0][0][0]);
     console.log(tree[1][1][1][1][1][1][1][0][0][0]);
-    console.log(tree[1][1][1][1][1][1][1][1][1][1][1][0][1]);
-    console.log(tree[1][1][1][1][1][1][1][1][1][1][1][1][0][1]);
-    console.log(tree[1][1][1][1][1][1][1][1][1][1][1][1][1][1][0][1]);
-    console.log(tree[1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][0]);
-    console.log(tree[1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][0][1][1][1][0][1]);
+    console.log(tree[1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][0][0][0][0]);
+    console.log(tree[1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1]);
+}
 
-    console.log(tree[1][1][0][1][1][1][0]);
-    console.log(tree[1][1][1][1][0][1][0][1]);
-    console.log(tree[1][1][0][0][1][1]);
-    console.log(tree[1][0][0][0][0]);
-    console.log(tree[1][1][0][0][1][0]);
+function toByteBuffer(byteString) {
+    if (arguments.length === 0 || byteString.length === 0) {
+        throw Error('Invalid Argument');
+    }
+    var i;
+
+    console.log('input: ', byteString);
+    if (byteString.length % 8 !== 0) {
+        // Each buffer element store 8 bit integer.
+        // Allocate input bits to largest bit by adding 0 to suffix of buffer.
+        var suffixPaddingLength = 8 - (byteString.length % 8);
+        var padding = '';
+        for (i = 0; i < suffixPaddingLength; i++) {
+            padding += '0';
+        }
+        byteString += padding;
+    }
+
+    // concat each 8 bit fraction.
+    var buffLength = byteString.length / 8;
+    console.log('len: ', buffLength);
+    var returnBuff = new Buffer(buffLength);
+    for (i = 0; i < buffLength; i++) {
+        console.log(byteString.slice(8 * i, 8 * (i + 1)));
+        returnBuff[i] = parseInt(byteString.slice(8 * i, 8 * (i + 1)), 2);
+    }
+
+    return returnBuff;
+}
+
+function equal(byteString, expectedString) {
+    var huffman = new HuffmanDecoder(toByteBuffer(byteString), 0);
+    huffman.traverse(huffman.getNextBit());
+    assert.strictEqual(huffman.decoded.join(''), expectedString);
 }
 
 function testDecode() {
-    var payload, huffman;
+    // 5 bit
+    equal('00000', '0');
+    equal('01001', 't');
 
-    // y, 8 bit
-    payload = new Buffer(1);
-    payload[0] = parseInt('11110101', 2);
-    huffman = new HuffmanDecoder(payload, 0);
-    huffman.traverse(huffman.getNextBit());
+    // 6 bit
+    equal('010101', '%');
+    equal('100000', '=');
 
-    // a, 5 bit
-    payload = new Buffer(1);
-    payload[0] = parseInt('01111000', 2);
-    huffman = new HuffmanDecoder(payload, 0);
-    huffman.traverse(huffman.getNextBit());
+    // 7 bit
+    equal('1111010', 'y');
 
-    // {, 16 bit
-    payload = new Buffer(2);
-    payload[0] = parseInt('11111111', 2);
-    payload[1] = parseInt('11111100', 2);
-    huffman = new HuffmanDecoder(payload, 0);
-    huffman.traverse(huffman.getNextBit());
+    // 8 bit
+    equal('11111100', 'X');
 
-    // `, 17 bit
-    payload = new Buffer(3)
-    payload[0] = parseInt('11111111', 2);
-    payload[1] = parseInt('11111111', 2);
-    payload[2] = 0;
-    huffman = new HuffmanDecoder(payload, 0);
-    huffman.traverse(huffman.getNextBit());
+    // 10 bit
+    equal('1111111000', '!');
+
+    console.log('PASSED ALL TESTS');
 }
 
 testTree();

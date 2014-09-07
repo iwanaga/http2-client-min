@@ -17,7 +17,7 @@ var requestHeaders = [
 ];
 
 // Todo: refactor...
-var initialSettingFrame = Buffer([
+var initialSettingFrame = new Buffer([
     0x0, 0x0, Http2.FrameType.SETTINGS, 0x0,
     0x0, 0x0, 0x0, 0x0
 ]);
